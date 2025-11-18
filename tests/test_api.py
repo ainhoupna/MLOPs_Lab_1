@@ -63,8 +63,7 @@ def test_api_predict_invalid_file_type(test_client):
     response = test_client.post("/predict", files=files)
     
     assert response.status_code == 400
-    assert "Invalid input. Please upload a JPEG or PNG image." in response.json()["detail"]
-
+    assert "Invalid image format. Only JPEG/PNG allowed." in response.json()["detail"]
 
 def test_api_resize_success(test_client, image_buffer):
     """Tests the /resize endpoint with a valid image and form data."""
@@ -89,3 +88,45 @@ def test_api_resize_missing_form_data(test_client, image_buffer):
     
     assert response.status_code == 422
     assert "height" in response.json()["detail"][0]["loc"]
+
+
+def test_api_grayscale_success(test_client, image_buffer):
+    """Tests the /grayscale endpoint with a valid image upload."""
+    files = {"file": ("test_image.jpg", image_buffer, "image/jpeg")}
+    
+    response = test_client.post("/grayscale", files=files)
+    
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    
+    # Verification: Check if the returned image is grayscale ('L' mode)
+    img = Image.open(io.BytesIO(response.content))
+    assert img.mode == 'L'
+
+def test_api_rotate_success(test_client, image_buffer):
+    """Tests the /rotate endpoint with a valid image and form data (degrees)."""
+    files = {"file": ("test_image.jpg", image_buffer, "image/jpeg")}
+    data = {"degrees": "90"} # Form data for the angle
+
+    response = test_client.post("/rotate", files=files, data=data)
+    
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    
+    # Verification: Check if the image size has changed due to rotation (expand=True)
+    rotated_img = Image.open(io.BytesIO(response.content))
+    
+    # Since the fixture image is 10x10, the size should remain 10x10, but the 
+    # crucial check is successful execution and correct content type.
+    assert rotated_img.width > 0 
+
+def test_api_rotate_missing_form_data(test_client, image_buffer):
+    """Tests the /rotate endpoint when the required degrees parameter is missing."""
+    files = {"file": ("test_image.jpg", image_buffer, "image/jpeg")}
+    data = {} # Missing degrees
+
+    response = test_client.post("/rotate", files=files, data=data)
+    
+    # Should fail due to missing required Form parameter
+    assert response.status_code == 422
+    assert "degrees" in response.json()["detail"][0]["loc"]

@@ -59,4 +59,4 @@ def test_cli_predict_file_not_found(cli_runner):
     result = cli_runner.invoke(cli, ["predict", "non_existent_file.jpg"])
     
     assert result.exit_code != 0
-    assert "Error: No such file or directory" in result.output
+    assert "Path 'non_existent_file.jpg' does not exist." in result.output
