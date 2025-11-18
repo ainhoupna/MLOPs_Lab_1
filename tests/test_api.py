@@ -2,114 +2,90 @@
 Integration testing with the API
 
 """
-import io
-import json
+
+# tests/test_api.py
+
 import pytest
-from api.api import app
+import io
+from PIL import Image
 from fastapi.testclient import TestClient
 
+#  Import the application from your file structure
+from api.api import app 
+
+# --- Fixtures for API Tests ---
+
+@pytest.fixture(scope="module")
+def test_client():
+    """Fixture for the FastAPI TestClient."""
+    with TestClient(app) as client:
+        yield client
+
+@pytest.fixture(scope="module")
+def sample_image_path(tmp_path_factory):
+    """Creates a temporary JPEG image file for use in tests."""
+    img_dir = tmp_path_factory.mktemp("data_api")
+    img_path = img_dir / "test_image.jpg"
+    
+    img = Image.new('RGB', (10, 10), color = 'red')
+    img.save(img_path, "jpeg")
+    
+    return img_path
 
 @pytest.fixture
-def client():
-    """Testing client from FastAPI."""
-    return TestClient(app)
+def image_buffer(sample_image_path):
+    """Reads the test image into an io.BytesIO buffer."""
+    with open(sample_image_path, "rb") as f:
+        img_bytes = io.BytesIO(f.read())
+    
+    img_bytes.seek(0)
+    # Use yield so the buffer can be reset for tests if needed, though for client.post() it's consumed.
+    yield img_bytes
 
+# --- Tests ---
 
-def test_home_endpoint(client):
-    """Verify that the endpoint / returns the right message."""
-    response = client.get("/")
-    assert response.status_code == 200
-
-
-def test_calculate_add(client):
-    """Verify that the endpoint /calculate performs the sum correctly."""
-    response = client.post(
-        "/calculate",
-        data={"op": "add", "a": 5, "b": 3},
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "result" in data
-    assert data["result"] == 8
-
-def test_calculate_subtract(client):
-    """Verify that the endpoint /calculate performs the subtract correctly."""
-    response = client.post(
-        "/calculate",
-        data={"op": "subtract", "a": 5, "b": 3},
-    )
+def test_api_predict_success(test_client, image_buffer):
+    """Tests the /predict endpoint with a valid image upload."""
+    files = {"file": ("test_image.jpg", image_buffer, "image/jpeg")}
+    
+    response = test_client.post("/predict", files=files)
+    
     assert response.status_code == 200
     data = response.json()
-    assert "result" in data
-    assert data["result"] == 2
+    
+    assert "predicted_class" in data
 
-def test_calculate_multiply(client):
-    """Verify that the endpoint /calculate performs the multiply correctly."""
-    response = client.post(
-        "/calculate",
-        data={"op": "multiply", "a": 5, "b": 3},
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "result" in data
-    assert data["result"] == 15
-
-def test_calculate_divide(client):
-    """Verify that the endpoint /calculate performs the divide correctly."""
-    response = client.post(
-        "/calculate",
-        data={"op": "divide", "a": 6, "b": 3},
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "result" in data
-    assert data["result"] == 2
-
-def test_calculate_divide_by_zero(client):
-    """Verify that the endpoint /calculate manages correctly the division by zero."""
-    response = client.post("/calculate", data={"op": "divide", "a": 5, "b": 0})
+def test_api_predict_invalid_file_type(test_client):
+    """Tests the /predict endpoint with an invalid content type (text/plain)."""
+    text_buffer = io.BytesIO(b"This is not an image.")
+    files = {"file": ("not_an_image.txt", text_buffer, "text/plain")}
+    
+    response = test_client.post("/predict", files=files)
+    
     assert response.status_code == 400
-    data = response.json()
-    assert "detail" in data
-    assert data["detail"] == "Zero division not allowed"
+    assert "Invalid input. Please upload a JPEG or PNG image." in response.json()["detail"]
 
-def test_calculate_power(client):
-    """Verify that the endpoint /calculate performs the power correctly."""
-    response = client.post(
-        "/calculate",
-        data={"op": "power", "a": 2, "b": 3},
-    )
+
+def test_api_resize_success(test_client, image_buffer):
+    """Tests the /resize endpoint with a valid image and form data."""
+    files = {"file": ("test_image.jpg", image_buffer, "image/jpeg")}
+    data = {"width": "50", "height": "50"}
+    
+    response = test_client.post("/resize", files=files, data=data)
+    
     assert response.status_code == 200
-    data = response.json()
-    assert "result" in data
-    assert data["result"] == 8
-
-def test_calculate_invalid_operation(client):
-    """Verify that the endpoint /calculate manages correctly unvalid operations."""
-    response = client.post(
-        "/calculate", data={"op": "invalid_op", "a": 5, "b": 3}
-    )
-    assert response.status_code == 400
-    data = response.json()
-    assert "detail" in data
-    assert data["detail"] == "Unvalid operation"
+    assert response.headers["content-type"] == "image/jpeg"
+    
+    img = Image.open(io.BytesIO(response.content))
+    assert img.size == (50, 50)
 
 
-def test_calculate_invalid_parameters(client):
-    """Verify that the endpoint /calculate manages correctly unvalid parameters."""
-    response = client.post("/calculate", data={"op": "add", "a": "five", "b": 3})
-    assert (
-        response.status_code == 422 # FastAPI returns 422 for validation errors
-    )  
-    data = response.json()
-    assert "detail" in data
-
-
-def test_calculate_missing_parameters(client):
-    """Verify that the endpoint /calculate manages correctly missing parameters."""
-    response = client.post("/calculate", data={"op": "add", "a": 5})  # 'b' missed
-    assert (
-        response.status_code == 422 # FastAPI returns 422 for validation errors
-    )
-    data = response.json()
-    assert "detail" in data
+def test_api_resize_missing_form_data(test_client, image_buffer):
+    """Tests the /resize endpoint when a required form parameter (height) is missing."""
+    files = {"file": ("test_image.jpg", image_buffer, "image/jpeg")}
+    data = {"width": "50"}
+    
+    response = test_client.post("/resize", files=files, data=data)
+    
+    assert response.status_code == 422
+    assert "height" in response.json()["detail"][0]["loc"]
