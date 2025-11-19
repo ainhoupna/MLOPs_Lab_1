@@ -1,4 +1,4 @@
-[![CI](https://github.com/ainhoupna/MLOps-Lab1/actions/workflows/CI.yml/badge.svg)](https://github.com/ainhoupna/MLOps-Lab1/actions/workflows/CI.yml)
+[![CI](https://github.com/ainhoupna/MLOPs_Lab_1/actions/workflows/CI.yml/badge.svg)](https://github.com/ainhoupna/MLOPs_Lab_1/actions/workflows/CI.yml)
 
 
 # MLOps-Lab1: Initial Image Classification Pipeline
