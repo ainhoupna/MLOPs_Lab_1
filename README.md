@@ -29,7 +29,7 @@ Ensure your virtual environment is active before running any commands.
 | `make format` | Automatically formats all Python code. | `black` |
 | `make lint` | Checks code quality and style compliance. | `pylint` |
 | `make test` | **Runs all unit and integration tests.** | `pytest`, `pytest-cov` |
-| `make all` | Runs `install`, `format`, `lint`, and `test` in sequence. | N/A |
+| `make all` | Runs `install`, `format`, `lint`, and `test` in sequence. | all previous |
 
 ### CI Pipeline (`.github/workflows/ci.yml`)
 
